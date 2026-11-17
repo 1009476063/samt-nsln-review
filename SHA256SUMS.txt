@@ -1,0 +1,2 @@
+9864799c659c69aff0f4d025311ea69f7dafd5153be17caaea8841289c1cbaac  SAMT-Desktop-macOS-arm64.dmg
+63fed2b7e37f9fa0c7ed67d5528c771e6896ac04acfb96faa20ff0ba531b3001  SAMT-Desktop-Windows-x64.zip
