@@ -211,9 +211,9 @@ reproducibility checks, plus their workbook.
 
 Each study carries the raw DCE, a precomputed `_DCE_N4`, the DCE and MLO
 `decay1` priors, `GTV` and `GTVnd1` contours for both modalities, and its row
-in `CP.xlsx`. The workbook carries the 9 clinical and 10 pathology source
-fields; it deliberately omits any derived quantity, which is the normal
-situation for a study workbook.
+in `CP.xlsx`. The workbook carries `ID`, the 9 clinical fields and the 10
+pathology fields defined by the experiment contract, with the original
+category values and units.
 
 Both studies were resolved with the application's own loader:
 
@@ -303,7 +303,8 @@ repository copy pristine.
 4. Open **Prediction results** and compare with the reference values below.
 5. Export the CSV to keep the ensemble and per-checkpoint probabilities.
 
-Reference values from the packaged build on CPU, for the supplied products:
+Reference values on CPU for the supplied products, from the ten-checkpoint
+ensemble running on the packaged checkpoints:
 
 | Study | `P(NSLN negative)` | `P(NSLN positive)` | Ensemble class | Checkpoint votes |
 |---|---|---|---|---|
@@ -419,8 +420,8 @@ name, hospital number, medical record number, date of birth or acquisition
 date, and they must not be used for clinical decisions or re-identification.
 
 Native Windows acceptance on physical hardware, GPU parity and long-queue
-stress testing were validated separately from this packaging run; CPU results
-reported here come from the packaged macOS arm64 build.
+stress testing were not part of this packaging run and remain separate work.
+The CPU reference probabilities above were reproduced on macOS arm64.
 
 ---
 
