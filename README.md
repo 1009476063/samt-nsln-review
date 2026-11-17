@@ -306,7 +306,7 @@ Reference values from the packaged build on CPU, for the supplied products:
 | Study | `P(NSLN negative)` | `P(NSLN positive)` | Ensemble class | Checkpoint votes |
 |---|---|---|---|---|
 | case1 | 0.491008834540844 | 0.508991165459156 | Positive | 5 positive / 5 negative |
-| case2 | 0.1865430176258087 | 0.8134569823741913 | Positive | 10 positive / 0 negative |
+| case2 | 0.1865430247038603 | 0.8134569823741913 | Positive | 10 positive / 0 negative |
 
 Case1 is a borderline result in both senses: the ensemble mean sits barely
 above `0.5` and the ten checkpoints split evenly. Case2 is a clean positive.
