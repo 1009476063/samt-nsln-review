@@ -27,7 +27,8 @@ plus 23 pathology features encoded from the study workbook.
 | `SHA256SUMS.txt` | Download verification hashes |
 | `README.md` | This guide |
 
-**Release files:** download from the [Releases](../../releases) page. All
+**Release files:** download from the
+[Releases](https://github.com/1009476063/samt-nsln-review/releases) page. All
 assets are listed with exact sizes and SHA-256 values below.
 
 | Platform | File name | Size (bytes) |
@@ -63,7 +64,8 @@ ten-checkpoint arithmetic mean and the class rule are unchanged.
 
 ## 2. Download and Verify
 
-1. Open the **Releases** page of this repository.
+1. Open the [Releases](https://github.com/1009476063/samt-nsln-review/releases)
+   page of this repository.
 2. Download the asset for your platform and `SHA256SUMS.txt`.
 
 macOS:
