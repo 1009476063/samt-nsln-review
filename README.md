@@ -190,7 +190,7 @@ and units keep their original meaning.
 | Accepted variation | Behavior |
 |---|---|
 | Reordered rows or columns; header whitespace, BOM, letter case, full-width characters | Normalized to the exact experiment names |
-| `case_id`, `Case ID`, `patient_id`, `Patient ID`, `病例ID`, `患者ID` | Explicit aliases of `ID` |
+| `case_id`, `Case ID`, `patient_id`, `Patient ID` and the two localized case/patient ID names | Explicit aliases of `ID` |
 | Existing `Sheet1` with the required fields | Preferred |
 | No usable `Sheet1`, exactly one usable data sheet | Selected; notes-only sheets are allowed |
 | Several candidate sheets, duplicate column mappings, conflicting rows for one ID | Blocked with an explanation |
