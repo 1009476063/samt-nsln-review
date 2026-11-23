@@ -15,6 +15,12 @@ metastasis. It wraps SAMT, a multimodal attention-transformer model that fuses
 DCE-MRI and mammography MLO with adaptive spatial decay priors and 32 clinical
 plus 23 pathology features encoded from the study workbook.
 
+> **Current ensemble definition.** Each prediction uses five checkpoints, one
+> per fold, all selected by the same validation metric: `AUC` by default, or
+> `ACC`. The lossless store retains all ten AUC/ACC checkpoint states so the
+> metric can be switched offline. The original `--scan_all` behavior mixed both
+> metrics and is not the current desktop rule.
+
 ---
 
 ## Contents
@@ -24,20 +30,35 @@ plus 23 pathology features encoded from the study workbook.
 | `SAMT-Desktop-macOS-arm64.dmg` | macOS Apple Silicon application image |
 | `SAMT-Desktop-Windows-x64.zip` | Portable Windows x64 application |
 | `sample-data/` | Two de-identified example studies and one clinical workbook |
+| `README-ASSETS.txt` | Short extraction notes shipped with the binaries |
 | `SHA256SUMS.txt` | Download verification hashes |
 | `README.md` | This guide |
 
 **Release files:** download from the
 [Releases](https://github.com/1009476063/samt-nsln-review/releases) page. All
-assets are listed with exact sizes and SHA-256 values below.
+assets are listed with exact sizes and SHA-256 values below. The current
+reviewer distribution is `SAMT Desktop V1.0 · Reviewer Distribution
+(build 1.8.0)`.
 
-| Platform | File name | Size (bytes) |
-|---|---|---|
-| macOS arm64 | `SAMT-Desktop-macOS-arm64.dmg` | 1,901,419,731 |
-| Windows x64 | `SAMT-Desktop-Windows-x64.zip` | 2,096,288,527 |
+| Platform | File name | Size (bytes) | SHA-256 |
+|---|---|---|---|
+| macOS arm64 | `SAMT-Desktop-macOS-arm64.dmg` | 1,901,531,730 | `81970ce052f7b9d430d28f1e1b1b262149ca0340d2a60c3f7cb8286b0df96ab2` |
+| Windows x64 | `SAMT-Desktop-Windows-x64.zip` | 2,096,407,457 | `ee8a12020790c849f95c4e80c0c840109ae5e9cf4c063ae3d7ec34843aa82116` |
 
-The archives are self-contained. Python, PyTorch, the runtime and the ten
-model checkpoints do not need to be installed separately.
+The same values are in `SHA256SUMS.txt`, which also covers
+`README-ASSETS.txt`. Compare the full 64-character digest, not a prefix.
+
+A current package is self-contained. Python, PyTorch, the runtime and the
+lossless checkpoint store do not need to be installed separately. The store
+retains all ten AUC/ACC checkpoint states so the ensemble metric can be
+switched without another download; one prediction uses only the five selected
+states.
+
+This guide describes the v1.8.0 build in the reviewer release and the numbers
+below come from it. The previous reviewer build (1.7.1) averaged all ten
+AUC/ACC checkpoints in a single run, so it does not reproduce this table. If
+the packaged application reports a version older than 1.8.0 under **Method and
+scope**, download the release again rather than comparing results.
 
 ---
 
@@ -58,7 +79,7 @@ The Windows build needs no separate runtime. If a machine reports a missing
 
 CPU is the numerical reference for the published probabilities. A CUDA or MPS
 device, when selected under Runtime settings, may differ in the last bits; the
-ten-checkpoint arithmetic mean and the class rule are unchanged.
+five-fold arithmetic mean and the class rule are unchanged.
 
 ---
 
@@ -94,6 +115,12 @@ Compare the output with the matching line in `SHA256SUMS.txt`.
 xattr -dr com.apple.quarantine /Applications/SAMT-Desktop.app
 ```
 
+Before running that command, check the download itself. A truncated or
+error-page download also opens as "damaged". The real image is 1,901,531,730
+bytes and begins with the bytes `78 01 ed d0 b1 09`; a file of a few hundred
+bytes, or one that `file` reports as XML or HTML, is an interrupted download.
+Delete it, verify the SHA-256, and download again.
+
 ### 2.2 Windows
 
 1. Extract the **entire** archive to a local folder, for example
@@ -110,7 +137,7 @@ folders as the extraction target.
 
 ## 3. First Launch
 
-The first start takes 10 to 30 seconds while the runtime and the ten
+The first start takes 10 to 30 seconds while the runtime and the selected
 checkpoints load. The status bar reports `Models ready` when inference is
 available.
 
@@ -249,7 +276,7 @@ Both studies were resolved with the application's own loader:
 2. Select **Scan cases**. The readiness column reports every required input;
    only complete cases can be scored.
 3. Select **Run batch prediction**. Progress is reported per case and per
-   checkpoint.
+   fold checkpoint.
 4. Review the table, inspect a selected case's details, and export the CSV.
 
 ### 5.3 Preprocessing
@@ -272,20 +299,21 @@ this instead of silently reusing it.
 
 ### 5.4 Reading the result
 
-The results page shows six-decimal probabilities, the class, the ten-checkpoint
+The results page shows six-decimal probabilities, the class, the five-fold
 vote split, the margin from `0.5`, the usable checkpoint count and the source
-of each row.
+of each row for the selected ensemble metric.
 
 | Displayed probability of NSLN-positive | Ensemble class |
 |---|---|
 | `P(positive) > P(negative)` | Positive |
 | `P(positive) <= P(negative)` | Negative |
 
-Each of the ten checkpoints returns a two-class softmax; the two displayed
-probabilities are the arithmetic means across checkpoints, and the higher mean
-determines the class. The positive/negative vote count describes disagreement
-between checkpoints and is not a majority-vote rule. Values stay at six
-decimals so a margin below `0.01` remains visible.
+Each of the five selected checkpoints, one per fold, returns a two-class
+softmax; the two displayed probabilities are the arithmetic means across those
+five checkpoints, and the higher mean determines the class. The
+positive/negative vote count describes disagreement between folds and is not a
+majority-vote rule. Values stay at six decimals so a margin below `0.01`
+remains visible.
 
 ---
 
@@ -301,32 +329,32 @@ repository copy pristine.
 3. Select **Run batch prediction**. Because both studies ship `_DCE_N4`,
    inference starts without the N4 stage.
 4. Open **Prediction results** and compare with the reference values below.
-5. Export the CSV to keep the ensemble and per-checkpoint probabilities.
+5. Export the CSV to keep the ensemble and per-selected-checkpoint
+   probabilities.
 
-Reference values on CPU for the supplied products, from the ten-checkpoint
-ensemble running on the packaged checkpoints:
+Reference values for a current CPU build on the supplied products. Each row
+uses one validation metric and one checkpoint per fold, selected in fold order
+1 to 5:
 
-| Study | `P(NSLN negative)` | `P(NSLN positive)` | Ensemble class | Checkpoint votes |
+| Study | Ensemble metric | `P(NSLN negative)` | `P(NSLN positive)` | Ensemble class |
 |---|---|---|---|---|
-| case1 | 0.491008834540844 | 0.508991165459156 | Positive | 5 positive / 5 negative |
-| case2 | 0.1865430247038603 | 0.8134569823741913 | Positive | 10 positive / 0 negative |
+| case1 | `AUC` | 0.5527292549610138 | 0.44727074503898623 | Negative |
+| case2 | `AUC` | 0.2268205642700195 | 0.7731794357299805 | Positive |
+| case1 | `ACC` | 0.4292884141206741 | 0.5707115858793259 | Positive |
+| case2 | `ACC` | 0.14626547098159792 | 0.8537345290184021 | Positive |
 
-Case1 is a borderline result in both senses: the ensemble mean sits barely
-above `0.5` and the ten checkpoints split evenly. Case2 is a clean positive.
-The same point is reached from the single-case page.
+`AUC` is the default. Case1 changes class between the two selection metrics:
+under `AUC` its positive probability is `0.447271`, while the earlier ensemble
+that averaged all ten AUC/ACC checkpoints gave `0.508991`. The shift comes
+from no longer mixing ACC-selected checkpoints into an AUC run; preprocessing,
+the network, softmax and the `0.5` rule are unchanged. Case2 remains positive
+under both metrics. The same values are reached from the single-case page.
 
 If you delete `_DCE_N4`, `_DCE_decay1` and the MLO `decay1` files from a copy
-of the studies and run **Preprocessing** instead, the regenerated inputs give:
-
-| Study | `P(NSLN positive)`, products regenerated by the application |
-|---|---|
-| case1 | 0.5091797649860382 |
-| case2 | 0.81410311460495 |
-
-Regenerating N4 changes the input tensor, so the two rows are not a
-model-drift comparison. On identical regenerated inputs, the original
-experiment, the single-case page and the batch queue agreed to the last
-printed digit for all ten checkpoints.
+of the studies and run **Preprocessing** instead, the inputs are regenerated
+before the same five-fold ensemble is applied. Regenerating N4 changes the
+input tensor, so those results are not a model-drift comparison and are not
+interchangeable with the table above.
 
 ---
 
@@ -357,9 +385,10 @@ ITK-SNAP) and place the resulting NIfTI masks in the case folder.
 | Section | Setting | Purpose |
 |---|---|---|
 | Interface | Interface language | English or Simplified Chinese, applied immediately |
-| Model and compute | Checkpoint directory | Re-detect or point at another ten-checkpoint directory |
+| Model and compute | Checkpoint directory | Re-detect or point at another lossless store, or at fold checkpoint files containing both AUC and ACC selections |
+| Model and compute | Ensemble metric | Choose `AUC` (default) or `ACC`; the next prediction reloads one checkpoint per fold from that selection |
 | Model and compute | Compute backend | CPU (numerical reference), CUDA or MPS where available |
-| Model and compute | Low memory mode | Load checkpoints sequentially; same ensemble rule |
+| Model and compute | Low memory mode | Load the five selected checkpoints sequentially; same ensemble rule |
 | Workflow | Open results after prediction | Navigation only |
 | Method and scope | Research use statement | Full scope declaration and version |
 
@@ -380,7 +409,8 @@ tables.
 ## 9. Method and Fidelity
 
 The desktop shell wraps the experiment inference path without changing
-preprocessing, model structure or ensemble rules:
+preprocessing or model structure; the ensemble now uses one validation metric
+per run:
 
 1. DCE-MRI and MLO are concatenated with their `decay1` spatial priors, then
    z-score normalized and resized to `144 x 320 x 320` and `640 x 512`.
@@ -388,12 +418,20 @@ preprocessing, model structure or ensemble rules:
    original category order, missing-value handling and normalization constants.
 3. Two ResNet18 backbones and two MLPs map the four inputs to 256-dimensional
    tokens; a CLS Transformer fuses them into two-class logits.
-4. Ten checkpoints (five folds x `best_AUC` / `best_ACC`) each produce softmax
-   probabilities; the per-class arithmetic mean gives the reported result.
+4. Five checkpoints, one per fold, are selected by the same validation metric
+   (`AUC` by default, or `ACC`). Each selected checkpoint produces a softmax;
+   the per-class arithmetic mean over those five gives the reported result.
 
-There is no quantization, pruning, conversion, model reduction, sample-specific
-threshold or majority vote. The bundled weights are the experiment
-checkpoints, stored losslessly.
+The original `infer.py --scan_all` recursively collected every `.pth` file and
+therefore mixed five AUC-selected with five ACC-selected checkpoints. The
+desktop build does not mix metrics: it requires exactly one checkpoint for
+each of the five folds. A missing, duplicate or mixed-metric selection is
+reported instead of being silently averaged.
+
+There is no quantization, pruning, conversion, sample-specific threshold or
+majority vote. The lossless store contains all ten experiment checkpoints as
+raw shared tensors so the metric can be switched offline; inference reads only
+the selected five.
 
 The desktop source is not part of this repository. This distribution exists so
 that a reviewer can reproduce the reported predictions on the two supplied
