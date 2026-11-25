@@ -16,10 +16,12 @@ DCE-MRI and mammography MLO with adaptive spatial decay priors and 32 clinical
 plus 23 pathology features encoded from the study workbook.
 
 > **Current ensemble definition.** Each prediction uses five checkpoints, one
-> per fold, all selected by the same validation metric: `AUC` by default, or
-> `ACC`. The lossless store retains all ten AUC/ACC checkpoint states so the
-> metric can be switched offline. The original `--scan_all` behavior mixed both
-> metrics and is not the current desktop rule.
+> per fold, and every one of them is the AUC-selected state (`best_AUC_val`).
+> `AUC` is the only ensemble metric; there is no ACC prediction path and no
+> metric selector. The lossless store still carries all ten training states so
+> it stays traceable to the experiment, but the accuracy-selected files
+> (`best_ACC_val`) are never loaded for prediction. The original `--scan_all`
+> behavior averaged those ten mixed states and is not the desktop rule.
 
 ---
 
@@ -42,23 +44,27 @@ reviewer distribution is `SAMT Desktop V1.0 · Reviewer Distribution
 
 | Platform | File name | Size (bytes) | SHA-256 |
 |---|---|---|---|
-| macOS arm64 | `SAMT-Desktop-macOS-arm64.dmg` | 1,901,531,730 | `81970ce052f7b9d430d28f1e1b1b262149ca0340d2a60c3f7cb8286b0df96ab2` |
-| Windows x64 | `SAMT-Desktop-Windows-x64.zip` | 2,096,407,457 | `ee8a12020790c849f95c4e80c0c840109ae5e9cf4c063ae3d7ec34843aa82116` |
+| macOS arm64 | `SAMT-Desktop-macOS-arm64.dmg` | 1,899,865,704 | `a7125598905311810c29ce9625f7072d14d995da5ea9487a52bf6f1ff8f7388f` |
+| Windows x64 | `SAMT-Desktop-Windows-x64.zip` | 2,096,857,716 | `821459c19c93e327f2e0f61c90e9efd86d4e26ae587d8ed43d2f817abed45fc1` |
 
 The same values are in `SHA256SUMS.txt`, which also covers
 `README-ASSETS.txt`. Compare the full 64-character digest, not a prefix.
 
 A current package is self-contained. Python, PyTorch, the runtime and the
 lossless checkpoint store do not need to be installed separately. The store
-retains all ten AUC/ACC checkpoint states so the ensemble metric can be
-switched without another download; one prediction uses only the five selected
-states.
+keeps all ten checkpoint states from the training runs; five of them, the
+AUC-selected state of each fold, are the only weights inference reads. The
+ACC-selected states are shipped as provenance, not as a second prediction
+mode.
 
 This guide describes the v1.8.0 build in the reviewer release and the numbers
-below come from it. The previous reviewer build (1.7.1) averaged all ten
-AUC/ACC checkpoints in a single run, so it does not reproduce this table. If
-the packaged application reports a version older than 1.8.0 under **Method and
-scope**, download the release again rather than comparing results.
+below come from it. Two earlier packages are still in circulation and do not
+reproduce this table: build 1.7.1 averaged all ten AUC/ACC checkpoints in a
+single run, and the first 1.8.0 build still exposed ACC as a selectable
+metric. Version strings do not separate the two 1.8.0 builds, so compare the
+download against the SHA-256 values below instead of reading the version
+label. The reviewer release assets were replaced on 2026-11-25; a file with
+the older digest belongs to the superseded build.
 
 ---
 
@@ -116,7 +122,7 @@ xattr -dr com.apple.quarantine /Applications/SAMT-Desktop.app
 ```
 
 Before running that command, check the download itself. A truncated or
-error-page download also opens as "damaged". The real image is 1,901,531,730
+error-page download also opens as "damaged". The current image is 1,899,865,704
 bytes and begins with the bytes `78 01 ed d0 b1 09`; a file of a few hundred
 bytes, or one that `file` reports as XML or HTML, is an interrupted download.
 Delete it, verify the SHA-256, and download again.
@@ -163,12 +169,14 @@ and no patient data leaves the machine.
 A prediction consumes four model-ready images per case, plus the clinical and
 pathology row of that patient.
 
-### 4.1 Study tree
+### 4.1 Study tree or flat collection
 
 `StudyRoot`, `<Label>` and `<CaseID>` are placeholders; the folder names
 `MRMG`, `MG`, `CP.xlsx` and the imaging suffixes follow the experiment
 contract. `<Label>` is the on-disk class folder (`Positive` / `Negative` in
 the bundled data) and is kept only as provenance for the result table.
+
+Layout A is the experiment tree, with cases grouped under a label folder:
 
 ```text
 StudyRoot/
@@ -184,6 +192,28 @@ StudyRoot/
                 ├── *<CaseID>_*MLO_GTV.nii[.gz]
                 └── *<CaseID>_*MLO_GTVnd1.nii[.gz]
 ```
+
+Layout B is a flat collection: one workbook with the case folders beside it,
+and no `MRMG/<Label>/` level. This is the usual shape of a shared case
+collection exported without the training hierarchy.
+
+```text
+StudyRoot/
+├── CP.xlsx
+├── <CaseID>/
+│   ├── <CaseID>_DCE.nii[.gz]
+│   ├── <CaseID>_DCE_GTV.nii[.gz]
+│   ├── <CaseID>_DCE_GTVnd1.nii[.gz]
+│   └── MG/
+│       ├── *<CaseID>_*MLO.nii[.gz]
+│       ├── *<CaseID>_*MLO_GTV.nii[.gz]
+│       └── *<CaseID>_*MLO_GTVnd1.nii[.gz]
+└── <CaseID>/ …
+```
+
+In a flat collection the case ID comes from the folder name, and each case
+folder must hold at least one `<CaseID>_DCE*.nii[.gz]` file for it to be
+recognised. Folders named `MG` and `__MACOSX` are skipped.
 
 The four products actually read by the model are:
 
@@ -201,11 +231,15 @@ The four products actually read by the model are:
   `GTVnd1` contours.
 - Existing products are used unchanged; nothing is overwritten.
 - A single case may sit anywhere as a standalone `<CaseID>/` folder. Batch
-  mode needs a real study tree: the selected folder, `MRMG`, a label folder,
-  a case folder or its `MG` folder are all accepted, and the resolver walks up
-  to the root that owns `CP.xlsx` and `MRMG/`.
-- A flat collection of case folders is not treated as a study tree. Ambiguous
-  or conflicting candidates are reported, never guessed.
+  mode accepts either layout: the selected folder, `MRMG`, a label folder, a
+  case folder or its `MG` folder are all accepted, and the resolver walks up
+  to the nearest root that is valid in one of the two layouts.
+- Batch mode picks the layout from the root, not from the selection alone. A
+  root with `MRMG/` and `CP.xlsx` is a study tree; a root with `CP.xlsx`, no
+  `MRMG/`, and `<CaseID>/` folders that hold DCE files is a flat collection.
+  Selecting one case inside a flat collection narrows the batch to that case.
+- A folder without a workbook is never promoted to a collection. Ambiguous or
+  conflicting candidates are reported, never guessed.
 - NIfTI `.nii` and `.nii.gz` are accepted. DICOM directories are not read.
 
 ### 4.2 Clinical workbook
@@ -271,8 +305,9 @@ Both studies were resolved with the application's own loader:
 
 ### 5.2 Batch
 
-1. Open **Batch prediction** and select the study root that contains
-   `CP.xlsx` and `MRMG/`; `sample-data/` is such a root.
+1. Open **Batch prediction** and select the root that contains `CP.xlsx`,
+   either with `MRMG/<Label>/<CaseID>/` or with case folders directly beside
+   the workbook; `sample-data/` is a study tree.
 2. Select **Scan cases**. The readiness column reports every required input;
    only complete cases can be scored.
 3. Select **Run batch prediction**. Progress is reported per case and per
@@ -301,7 +336,8 @@ this instead of silently reusing it.
 
 The results page shows six-decimal probabilities, the class, the five-fold
 vote split, the margin from `0.5`, the usable checkpoint count and the source
-of each row for the selected ensemble metric.
+of each row. Every row was produced by the five AUC-selected fold
+checkpoints, so there is no metric column to compare.
 
 | Displayed probability of NSLN-positive | Ensemble class |
 |---|---|
@@ -332,23 +368,26 @@ repository copy pristine.
 5. Export the CSV to keep the ensemble and per-selected-checkpoint
    probabilities.
 
-Reference values for a current CPU build on the supplied products. Each row
-uses one validation metric and one checkpoint per fold, selected in fold order
-1 to 5:
+Reference values for a current CPU build on the supplied products. Each case
+uses the AUC-selected checkpoint of each fold, one per fold, in fold order 1
+to 5:
 
-| Study | Ensemble metric | `P(NSLN negative)` | `P(NSLN positive)` | Ensemble class |
-|---|---|---|---|---|
-| case1 | `AUC` | 0.5527292549610138 | 0.44727074503898623 | Negative |
-| case2 | `AUC` | 0.2268205642700195 | 0.7731794357299805 | Positive |
-| case1 | `ACC` | 0.4292884141206741 | 0.5707115858793259 | Positive |
-| case2 | `ACC` | 0.14626547098159792 | 0.8537345290184021 | Positive |
+| Study | `P(NSLN negative)` | `P(NSLN positive)` | Ensemble class |
+|---|---|---|
+| case1 | 0.5527292549610138 | 0.44727074503898623 | Negative |
+| case2 | 0.2268205642700195 | 0.7731794357299805 | Positive |
 
-`AUC` is the default. Case1 changes class between the two selection metrics:
-under `AUC` its positive probability is `0.447271`, while the earlier ensemble
-that averaged all ten AUC/ACC checkpoints gave `0.508991`. The shift comes
-from no longer mixing ACC-selected checkpoints into an AUC run; preprocessing,
-the network, softmax and the `0.5` rule are unchanged. Case2 remains positive
-under both metrics. The same values are reached from the single-case page.
+Case1 is a near-threshold Negative result: `0.447271` sits about `0.0527`
+below the `0.5` rule. That is expected. The earlier ten-checkpoint ensemble,
+which averaged five AUC-selected with five ACC-selected states, reached
+`0.508991` and classed case1 Positive. Dropping the ACC states is the whole
+change; preprocessing, the network, the softmax and the `0.5` rule are
+untouched. Case2 is Positive either way. The single-case page reaches the
+same values.
+
+Build 1.8.0 no longer offers an ACC run, so there is no second reference row
+to compare against. If **Runtime settings** still shows a metric dropdown,
+the installed package is the superseded 2026-11-24 build.
 
 If you delete `_DCE_N4`, `_DCE_decay1` and the MLO `decay1` files from a copy
 of the studies and run **Preprocessing** instead, the inputs are regenerated
@@ -385,10 +424,10 @@ ITK-SNAP) and place the resulting NIfTI masks in the case folder.
 | Section | Setting | Purpose |
 |---|---|---|
 | Interface | Interface language | English or Simplified Chinese, applied immediately |
-| Model and compute | Checkpoint directory | Re-detect or point at another lossless store, or at fold checkpoint files containing both AUC and ACC selections |
-| Model and compute | Ensemble metric | Choose `AUC` (default) or `ACC`; the next prediction reloads one checkpoint per fold from that selection |
+| Model and compute | Checkpoint directory | Re-detect or point at another lossless store, or at fold checkpoint files; only `best_AUC_val` states are selected |
+| Model and compute | Ensemble metric | Read-only `AUC`. There is no dropdown and no reload step; an `ACC` value saved by an older build has no effect and is dropped when settings are applied |
 | Model and compute | Compute backend | CPU (numerical reference), CUDA or MPS where available |
-| Model and compute | Low memory mode | Load the five selected checkpoints sequentially; same ensemble rule |
+| Model and compute | Low memory mode | Load the five AUC-selected checkpoints sequentially; same ensemble rule |
 | Workflow | Open results after prediction | Navigation only |
 | Method and scope | Research use statement | Full scope declaration and version |
 
@@ -400,8 +439,10 @@ Settings and the rotating log are stored per user:
 | Windows | `%APPDATA%\SAMT\` |
 
 `settings.json` holds preferences and the consent record; `samt.log` is the
-rotating application log. Report the version, OS and architecture, the steps
-that failed and a redacted log. Do not upload patient images or full clinical
+rotating application log. A legacy `ensemble_metric` key is no longer read,
+and applying settings removes it, so an old `ACC` selection cannot change
+which weights load. Report the version, OS and architecture, the steps that
+failed and a redacted log. Do not upload patient images or full clinical
 tables.
 
 ---
@@ -409,8 +450,8 @@ tables.
 ## 9. Method and Fidelity
 
 The desktop shell wraps the experiment inference path without changing
-preprocessing or model structure; the ensemble now uses one validation metric
-per run:
+preprocessing or model structure; the ensemble is fixed to the AUC-selected
+weights:
 
 1. DCE-MRI and MLO are concatenated with their `decay1` spatial priors, then
    z-score normalized and resized to `144 x 320 x 320` and `640 x 512`.
@@ -418,20 +459,22 @@ per run:
    original category order, missing-value handling and normalization constants.
 3. Two ResNet18 backbones and two MLPs map the four inputs to 256-dimensional
    tokens; a CLS Transformer fuses them into two-class logits.
-4. Five checkpoints, one per fold, are selected by the same validation metric
-   (`AUC` by default, or `ACC`). Each selected checkpoint produces a softmax;
-   the per-class arithmetic mean over those five gives the reported result.
+4. Five checkpoints, one per fold, are the `best_AUC_val` states. Each one
+   produces a softmax, and the per-class arithmetic mean over those five gives
+   the reported result.
 
 The original `infer.py --scan_all` recursively collected every `.pth` file and
-therefore mixed five AUC-selected with five ACC-selected checkpoints. The
-desktop build does not mix metrics: it requires exactly one checkpoint for
-each of the five folds. A missing, duplicate or mixed-metric selection is
-reported instead of being silently averaged.
+therefore averaged five AUC-selected with five ACC-selected checkpoints. The
+desktop build keeps a single path: it requires exactly one AUC checkpoint for
+each of the five folds, rejects a missing or duplicate fold, and never treats
+an `best_ACC_val` file as a prediction candidate. Selecting the accuracy
+states is not a supported mode, so no run mixes the two sets.
 
 There is no quantization, pruning, conversion, sample-specific threshold or
-majority vote. The lossless store contains all ten experiment checkpoints as
-raw shared tensors so the metric can be switched offline; inference reads only
-the selected five.
+majority vote. The lossless store is built from all ten training states and
+keeps each unique tensor once, so the package stays byte-traceable to the
+experiment; the checkpoint builder accepts five or ten inputs, and inference
+materialises only the five AUC ones.
 
 The desktop source is not part of this repository. This distribution exists so
 that a reviewer can reproduce the reported predictions on the two supplied
@@ -472,7 +515,9 @@ The CPU reference probabilities above were reproduced on macOS arm64.
 | `Windows protected your PC` | Unsigned executable. **More info**, then **Run anyway** |
 | The application closes immediately | The archive was not fully extracted, or `_internal` is missing. Re-extract the complete package |
 | `VCRUNTIME140.dll was not found` | Install the Microsoft Visual C++ 2015-2022 Redistributable (x64) |
-| A case is not listed in batch mode | The selection is not inside a tree with `CP.xlsx` and `MRMG/`, or the folder is not at `MRMG/<Label>/<CaseID>` |
+| A case is not listed in batch mode | The root has no `CP.xlsx`, or a flat case folder holds no `<CaseID>_DCE*.nii[.gz]` file. In a study tree the folder must also sit at `MRMG/<Label>/<CaseID>` |
+| The batch list is empty after selecting one case | In a flat collection the selected case folder needs a DCE file named after that folder, and the root workbook must sit in the parent directory |
+| Settings still show a metric selector | That is the superseded 2026-11-24 build, which also reports version 1.8.0. Compare the file hash with Section 1 rather than the version label |
 | A case is reported incomplete | One of the four model-ready inputs is missing, empty, or has mismatched array dimensions. Run **Preprocessing** and read the reported reason |
 | Clinical row not matched | The `ID` cell does not match the folder name, or several workbook rows claim it. Make the identifier unique |
 | Workbook rejected | Unknown field names, several candidate sheets or duplicate mappings. See Section 4.2; nothing is guessed |
