@@ -373,7 +373,7 @@ uses the AUC-selected checkpoint of each fold, one per fold, in fold order 1
 to 5:
 
 | Study | `P(NSLN negative)` | `P(NSLN positive)` | Ensemble class |
-|---|---|---|
+|---|---:|---:|---|
 | case1 | 0.5527292549610138 | 0.44727074503898623 | Negative |
 | case2 | 0.2268205642700195 | 0.7731794357299805 | Positive |
 
